@@ -53,10 +53,8 @@
                                         @else
                                             <td>己回覆</td>
                                         @endif
-                                        <td>
-                                            <a data-toggle="modal" data-target="#feedbackEmail" id="{{$feedback->id}}" name="{{$feedback->name}}" email="{{$feedback->email}}" class="btn btn-success sendFeedbackEmail" id="sendFeedbackEmail">傳送Email</a>
-                                            <button type="button" value="{{ $feedback->id}}" class="btn btn-danger feedbackDelete" id="feedbackDelete">刪除回饋</button>
-                                        </td>
+                                        <td><a data-toggle="modal" data-target="#feedbackEmail" id="{{$feedback->id}}" name="{{$feedback->name}}" email="{{$feedback->email}}" class="btn btn-success sendFeedbackEmail" id="sendFeedbackEmail">傳送Email</a></td>
+                                        <td><button type="button" value="{{ $feedback->id}}" class="btn btn-danger feedbackDelete" id="feedbackDelete">刪除回饋</button></td>
                                     </tr>
                                 </tbody>
                             @endforeach
