@@ -51,6 +51,15 @@ class VuforiaController extends Controller
         return view('vuforia/feedback',compact('feedbacks'));
     }
 
+    public function feedbackDelete()
+    {
+        $input = Input::all();
+
+        $feedbackId = $input['feedbackId'];
+
+        Feedback::where('id',$feedbackId)->delete();
+    }
+
     public function sendFeedbackEmail(){
 
         $input = Input::all();

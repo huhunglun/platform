@@ -53,7 +53,10 @@
                                         @else
                                             <td>己回覆</td>
                                         @endif
-                                        <td><a data-toggle="modal" data-target="#feedbackEmail" id="{{$feedback->id}}" name="{{$feedback->name}}" email="{{$feedback->email}}" class="btn btn-success sendFeedbackEmail" id="sendFeedbackEmail">傳送Email</a></td>
+                                        <td>
+                                            <a data-toggle="modal" data-target="#feedbackEmail" id="{{$feedback->id}}" name="{{$feedback->name}}" email="{{$feedback->email}}" class="btn btn-success sendFeedbackEmail" id="sendFeedbackEmail">傳送Email</a>
+                                            <button type="button" value="{{ $feedback->id}}" class="btn btn-danger feedbackDelete" id="feedbackDelete">刪除回饋</button>
+                                        </td>
                                     </tr>
                                 </tbody>
                             @endforeach
@@ -77,6 +80,35 @@
             $("#id").val($(this).attr("id"));
             $("#receiver").val($(this).attr("email"));
             $("#receiverName").val($(this).attr("name"));
+        });
+
+        $('.feedbackDelete').click(function (e) {
+            var feedbackId = $(this).attr("value");
+            bootbox.dialog({
+                title: '刪除回饋',
+                message:'確認要刪除回饋?',
+                onEscape:true,
+                buttons:{
+                    cancel: {
+                        label: "取消",
+                        className: "btn-danger"
+                    },
+                    confirm: {
+                        label: "確認",
+                        className: "btn-primary",
+                        callback: function() {
+                            $.ajax({
+                                url: "/feedbackdelete",
+                                type: "POST",
+                                data: {feedbackId: feedbackId},
+                                success: function (data) {
+                                    location.reload();
+                                }
+                            });
+                        }
+                    }
+                },
+            });
         });
     </script>
 @endsection

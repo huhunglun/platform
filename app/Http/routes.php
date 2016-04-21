@@ -114,6 +114,7 @@ Route::group(['middleware' => 'web'], function () {
 
     Route::get('/feedback', 'VuforiaController@feedback');
     Route::post('/sendfeedbackemail', 'VuforiaController@sendFeedbackEmail');
+    Route::post('/feedbackdelete', 'VuforiaController@feedbackDelete');
 
 });
 
