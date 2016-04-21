@@ -1,0 +1,159 @@
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+    <div class="row">
+        <div class="col-md-10 col-md-offset-1">
+            @can('isSuperAdmin',auth()->user())
+            <div style="margin-bottom: 10px">
+                <a class="btn btn-primary" id="admins" href="/admin">全部會員</a>
+                <a class="btn btn-success" id="admins" href="/admin/admins">管理者</a>
+                <a class="btn btn-info" id="users" href="/admin/users">使用者</a>
+            </div>
+            @endcan
+            <div class="panel panel-default">
+                <div class="panel-heading">會員管理
+                    @can('isSuperAdmin',auth()->user())
+                    <span class="pull-right"><a href="" data-toggle="modal" data-target="#createUser"><b>[&nbsp;新增使用者&nbsp;]</b></a></span>
+                    <span class="pull-right"><a href="" data-toggle="modal" data-target="#createAdmin"><b>[&nbsp;新增管理者&nbsp;]</b></a></span>
+                    @endcan
+                    @can('isAdmin',auth()->user())
+                    <span class="pull-right"><a href="" data-toggle="modal" data-target="#createUser"><b>[&nbsp;新增使用者&nbsp;]</b></a></span>
+                    @endcan
+                </div>
+                <div class="panel-body">
+                    <table class="table">
+                        @if (count($users) === 0)
+                            <thead>
+                            <td>還未有會員</td>
+                            </thead>
+                        @elseif (count($users) >= 1)
+                            <thead>
+                            <tr>
+                                <th>使用者名稱</th>
+                                <th>會員帳號</th>
+                                <th>辨識圖數量</th>
+                                <th>建立日期</th>
+                                <th>啟用狀態</th>
+                                @can('isSuperAdmin',auth()->user())
+                                <th>權限</th>
+                                @endcan
+                                <th>操作</th>
+                            </tr>
+                            </thead>
+                            @foreach($users as $user)
+                                <tbody>
+                                <tr>
+                                    <td><a href="/getusertarget/{{$user->id}}">{{$user->name}}</a></td>
+                                    <td>{{$user->email}}</td>
+                                    <td>{{$user->total_count}}</td>
+                                    <td>{{$user->created_at}}</td>
+                                        <th><a style="cursor:pointer" class="status" value="{{ $user->id}}" status="0">
+                                                @if($user->active == 1)
+                                                    <label>啟用中</label>
+                                                @elseif($user->active == 0)
+                                                    <label>關閉中</label>
+                                                @else
+                                                    <label>ERROR</label>
+                                                @endif
+                                            </a>
+                                        </th>
+                                    @can('isSuperAdmin',auth()->user())
+                                        <td><b>{{$user->role_name}}</b></td>
+                                    @endcan
+                                    @if(auth()->user()->id != $user->id)
+                                        <td><a href="" id="{{ $user->id}}" name="{{$user->name}}" email="{{$user->email}}" class="btn btn-success userModify" id="userModify" data-toggle="modal" data-target="#userModify">修改</a></td>
+                                        <td><button type="button" value="{{ $user->id}}" class="btn btn-danger userDelete" id="userDelete">刪除帳號</button></td>
+                                    @endif
+                                </tr>
+                                </tbody>
+                            @endforeach
+                        @endif
+                    </table>
+                    {!! $users->render()!!}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@can('isSuperAdmin',auth()->user())
+@include('vuforia.createAdmin')
+@endcan
+
+@can('isAdmin',auth()->user())
+@include('vuforia.createUser')
+@endcan
+
+@include('vuforia.modifyUser')
+
+@endsection
+@section('scripts')
+    <script>
+        $('.status').click(function (e) {
+            var userId = $(this).attr("value");
+            var status = $(this).attr("status");
+            bootbox.dialog({
+                title: '更改啟用狀態',
+                message:'確認要更改啟用狀態?',
+                onEscape:true,
+                buttons:{
+                    cancel: {
+                        label: "取消",
+                        className: "btn-danger"
+                    },
+                    confirm: {
+                        label: "確認",
+                        className: "btn-primary",
+                        callback: function() {
+                            $.ajax({
+                                url: "/vuforia/updatestatus",
+                                type: "POST",
+                                data: {userId: userId, status: status},
+                                success: function (data) {
+                                    location.reload();
+                                }
+                            });
+                        }
+                    }
+                },
+            });
+        });
+
+        $('.userDelete').click(function (e) {
+            var userId = $(this).attr("value");
+            bootbox.dialog({
+                title: '刪除使用者帳號',
+                message:'確認要刪除使用者帳號?',
+                onEscape:true,
+                buttons:{
+                    cancel: {
+                        label: "取消",
+                        className: "btn-danger"
+                    },
+                    confirm: {
+                        label: "確認",
+                        className: "btn-primary",
+                        callback: function() {
+                            $.ajax({
+                                url: "/vuforia/userdelete",
+                                type: "POST",
+                                data: {userId: userId},
+                                success: function (data) {
+                                    location.reload();
+                                }
+                            });
+                        }
+                    }
+                },
+            });
+        });
+
+        $('.userModify').click(function () {
+            $("#modifyId").val($(this).attr("id"));
+            $("#modifyName").val($(this).attr("name"));
+            $("#modifyEmail").val($(this).attr("email"));
+        });
+
+    </script>
+@endsection

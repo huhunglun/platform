@@ -1,0 +1,692 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Feedback;
+use App\Http\Helpers;
+use App\Users_app;
+use Carbon\Carbon;
+use App\Http\Requests;
+use Illuminate\Support\Facades\Input;
+use App\Target;
+use Illuminate\Support\Facades\DB;
+use Gate;
+use App\Targets_image;
+use App\Targets_video;
+use App\User;
+
+class VuforiaController extends Controller
+{
+
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        return view('vuforia/index');
+    }
+
+    public function socialUser(){
+
+        $usersApps = DB::table('users_apps')
+            ->orderBy('users_apps.created_at', 'desc')
+            ->paginate(10);
+
+        return view('vuforia/social',compact('usersApps'));
+    }
+
+    public function feedback(){
+
+        $feedbacks = DB::table('feedbacks')
+            ->orderBy('feedbacks.created_at', 'desc')
+            ->paginate(10);
+
+        return view('vuforia/feedback',compact('feedbacks'));
+    }
+
+    public function sendFeedbackEmail(){
+
+        $input = Input::all();
+        $emailTemplate = 'emails.sendFeedbackEmail';
+        Helpers::sendEmail($input['receiver'],$input['receiverName'],$input['subject'],$input['content'],$emailTemplate);
+
+        Feedback::where('id',$input['id'])->update(['response' => 1,'content_response'=>$input['content']]);
+
+        return redirect()->back()->with('message', '已傳送回饋信息!');
+    }
+
+    public function deleteSocialUser(){
+
+        $input = Input::all();
+        Users_app::where('id',$input['userAppId'])->delete();
+    }
+
+    public function admin($role = null)
+    {
+        $user_id = auth()->user()->id;
+
+        if (!(Gate::allows('isAdmin',auth()->user())) && !(Gate::allows('isSuperAdmin',auth()->user()))) {
+            abort(404);
+        };
+
+        $users = DB::table('users')
+            ->select(['users.*',DB::raw('COUNT(targets.id) as total_count'),'roles.role_name'])
+            ->leftJoin('targets', 'targets.users_id', '=', 'users.id')
+            ->leftJoin('roles', 'roles.id', '=', 'users.role_id')
+            ->where('roles.id', '=',1)
+            ->groupBy('users.id')
+            ->orderBy('role_id', 'desc')
+            ->get();
+
+        $admins = DB::table('users')
+            ->select(['users.*',DB::raw('COUNT(targets.id) as total_count'),'roles.role_name'])
+            ->leftJoin('targets', 'targets.users_id', '=', 'users.id')
+            ->leftJoin('roles', 'roles.id', '=', 'users.role_id')
+            ->where('roles.id', '=',2)
+            ->groupBy('users.id')
+            ->orderBy('role_id', 'desc')
+            ->get();
+
+        $superAdmins = DB::table('users')
+            ->select(['users.*',DB::raw('COUNT(targets.id) as total_count'),'roles.role_name'])
+            ->leftJoin('targets', 'targets.users_id', '=', 'users.id')
+            ->leftJoin('roles', 'roles.id', '=', 'users.role_id')
+            ->where('roles.id', '=',3)
+            ->groupBy('users.id')
+            ->orderBy('role_id', 'desc')
+            ->get();
+
+        $recoSum = DB::table('targets')->sum('recos');
+        $totalRecoSum = DB::table('targets')->sum('total_recos');
+
+        return view('vuforia/admin',compact('users','admins','superAdmins','recoSum','totalRecoSum'));
+    }
+
+
+    public function getTarget()
+    {
+        $user_id = auth()->user()->id;
+
+        $targets = DB::table('targets')
+            ->join('users', 'targets.users_id', '=', 'users.id')
+            ->where('users_id', '=',$user_id)
+            ->select('targets.*', 'users.name as user_name')
+            ->orderBy('targets.created_at', 'desc')
+            ->paginate(10);
+
+
+        return view('vuforia/getTarget',compact('targets'));
+    }
+
+    public function getUserTarget($userId)
+    {
+        if (!(Gate::allows('isAdmin',auth()->user())) && !(Gate::allows('isSuperAdmin',auth()->user()))) {
+            abort(404);
+        };
+
+        $user = User::where('id',$userId)->firstOrFail();
+
+        $targets = DB::table('targets')
+            ->join('users', 'targets.users_id', '=', 'users.id')
+            ->where('users_id', '=',$userId)
+            ->select('targets.*', 'users.name as user_name')
+            ->orderBy('targets.created_at', 'desc')
+            ->paginate(10);
+
+        return view('vuforia/getTarget',compact('targets','user'));
+    }
+
+    public function userDelete()
+    {
+        $input = Input::all();
+
+        $userId = $input['userId'];
+
+        $target = Target::where('users_id',$userId)->first();
+        if(count($target) > 0){
+            Targets_image::where('targets_id',$target->id)->delete();
+            Targets_video::where('targets_id',$target->id)->delete();
+            Target::where('users_id',$userId)->delete();
+        }
+        User::where('id',$userId)->delete();
+    }
+
+    public function updateStatus()
+    {
+        $input = Input::all();
+
+        $userId = $input['userId'];
+        $status = $input['status'];
+
+        User::where('id',$userId)->update(['active' => $status]);
+    }
+
+    public function targetDelete()
+    {
+        $input = Input::all();
+
+        $targetId = $input['id'];
+
+        target::where('id',$targetId)->delete();
+        Targets_image::where('targets_id',$targetId)->delete();
+        Targets_video::where('targets_id',$targetId)->delete();
+
+        return redirect('/')->with('message', '已刪除廣告!.');
+    }
+
+    public function imageTargetDelete()
+    {
+        $input = Input::all();
+
+        $imageTargetId = $input['imageTargetId'];
+
+        Targets_image::where('id',$imageTargetId)->delete();
+    }
+
+    public function imageTargetUpdate()
+    {
+        $input = Input::all();
+
+        $url = $input['url'];
+        $imageTargetId = $input['imageTargetId'];
+
+        Targets_image::where('id',$imageTargetId)
+            ->update(['image_url'=>$url]);
+    }
+
+    public function videoTargetDelete()
+    {
+        $input = Input::all();
+
+        $videoTargetId = $input['videoTargetId'];
+
+        Targets_video::where('id',$videoTargetId)->delete();
+    }
+
+    public function vuforiaAction()
+    {
+        $input = Input::all();
+        $selected = $input['select'];
+
+        if($selected == "DeleteTarget") {
+            $id = $input['targetId'];
+            $targetId = $input['vuforiaTargetId'];
+        }else {
+            $name = $input['name'];
+            $userId = $input['created_id'];
+            $vuforiaName = $userId . "_" . $name;
+            if ($selected == "UpdateTarget") {
+                $x_coordinate = $input['x_coordinate'];
+                $y_coordinate = $input['y_coordinate'];
+                $targetId = $input['targetId'];
+                $total_recos = $input['total_recos'];
+                $recos = $input['recos'];
+                $imageLocation = "";
+                if($total_recos > $recos){
+                    $imageLocation = $input['imageLocation'];
+                }
+            } elseif ($selected == "PostTarget") {
+                $imageLocation = substr($input['imageLocation'], 1);
+            }
+        }
+
+        return view('vuforia/vuforiaAction',compact('name','selected','imageLocation','userId','width','vuforiaName','x_coordinate','y_coordinate','targetId','id','total_recos'));
+    }
+
+    public function modifyUser()
+    {
+
+        $input = Input::all();
+
+        $user = User::Where('id',$input['modifyId'])->first();
+
+        $user->name = $input['modifyName'];
+        $user->email = $input['modifyEmail'];
+        $user->account = $input['modifyAccount'];
+
+        if(!empty($input['modifyPassword'])) {
+            $user->password = bcrypt($input['modifyPassword']);
+        }
+
+        $user->save();
+
+        return redirect()->back()->with('message', '已修改使用者!');
+    }
+
+    public function createUser()
+    {
+        $user_id = auth()->user()->id;
+        $input = Input::all();
+
+        $user = new User();
+        $user->name = $input['name'];
+        $user->account = $input['account'];
+        $user->email = $input['email'];
+        $user->password = bcrypt($input['password']);
+        $user->role_id = 1;
+        $user->parent_id = $user_id ;
+
+        $user->save();
+
+        return redirect()->back()->with('message', '已新增使用者!');
+    }
+
+    public function createAdmin()
+    {
+        $user_id = auth()->user()->id;
+        $input = Input::all();
+
+        $user = new User();
+        $user->name = $input['name'];
+        $user->account = $input['account'];
+        $user->email = $input['email'];
+        $user->password = bcrypt($input['password']);
+        $user->role_id = 2;
+        $user->parent_id = $user_id ;
+
+        $user->save();
+
+        return redirect()->back()->with('message', '已新增管理者!');
+    }
+    /**
+     * Store a newly created resource in storage.
+     * @return \Illuminate\Http\Response
+     * @internal param Request $request
+     */
+    public function storeTarget()
+    {
+        $input = Input::all();
+        $target = new Target();
+        $target->users_id = $input['userId'];
+        $target->vuforia_target_id = $input['targetId'];
+        $target->name = $input['name'];
+        $target->vuforia_target_name = $input['vuforiaName'];
+        $target->image_path = $input['imageLocation'];
+        $target->save();
+
+        return redirect('/')->with('message', '已新增廣告!');
+    }
+
+    public function updateTarget()
+    {
+        $input = Input::all();
+        $target = Target::whereVuforia_target_id($input['targetId'])->first();
+
+        $target->name = $input['name'];
+        $target->vuforia_target_name = $input['vuforiaName'];
+        $target->x_coordinate = $input['x_coordinate'];
+        $target->y_coordinate = $input['y_coordinate'];
+        $target->total_recos = $input['total_recos'];
+
+        $target->save();
+
+        return redirect('/')->with('message', '已更新廣告!.');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param $targetId
+     * @return \Illuminate\Http\Response
+     * @internal param int $id
+     */
+    public function showTargetDetail($targetId)
+    {
+        //Check Target ID
+        Target::where('vuforia_target_id',$targetId)->firstOrFail();
+
+        $user_id = auth()->user()->id;
+
+        if (Gate::allows('isAdmin',auth()->user()) || Gate::allows('isSuperAdmin',auth()->user())) {
+            $user_id = "";
+        };
+
+        $targets = DB::table('targets')
+            ->where('vuforia_target_id', '=', $targetId)
+            ->where('users_id', 'like','%' . $user_id . '%')
+            ->first();
+
+        $targets_images = DB::table('targets_images')
+            ->where('targets_id', '=', $targets->id)
+            ->get();
+
+        $targets_videos = DB::table('targets_videos')
+            ->where('targets_id', '=', $targets->id)
+            ->get();
+
+        return view('vuforia/detailTarget',compact('targets','targets_images','targets_videos'));
+    }
+
+    public function uploadTargetsYoutube()
+    {
+        $input = Input::all();
+
+        $my_id = $input['youtubeUrl'];
+
+        if( preg_match('/^https:\/\/w{3}?.youtube.com\//', $my_id) ){
+            $url   = parse_url($my_id);
+            $my_id = NULL;
+            if( is_array($url) && count($url)>0 && isset($url['query']) && !empty($url['query']) ){
+                $parts = explode('&',$url['query']);
+                if( is_array($parts) && count($parts) > 0 ){
+                    foreach( $parts as $p ){
+                        $pattern = '/^v\=/';
+                        if( preg_match($pattern, $p) ){
+                            $my_id = preg_replace($pattern,'',$p);
+                            break;
+                        }
+                    }
+                }
+                if( !$my_id ){
+                    echo '<p>No video id passed in</p>';
+                    exit;
+                }
+            }else{
+                echo '<p>Invalid url</p>';
+                exit;
+            }
+        }elseif( preg_match('/^https?:\/\/youtu.be/', $my_id) ) {
+            $url   = parse_url($my_id);
+            $my_id = NULL;
+            $my_id = preg_replace('/^\//', '', $url['path']);
+        }
+
+        $my_video_info = 'http://www.youtube.com/get_video_info?&video_id='. $my_id.'&asv=3&el=detailpage&hl=en_US'; //video details fix *1
+        $my_video_info = $this->curlGet($my_video_info);
+
+        /* TODO: Check return from curl for status code */
+        //$thumbnail_url = $title = $url_encoded_fmt_stream_map = $type = $url = '';
+
+        parse_str($my_video_info);
+
+        if($status=='fail'){
+            echo '<p>Error in video ID</p>';
+            exit();
+        }
+
+        if(isset($url_encoded_fmt_stream_map)) {
+            /* Now get the url_encoded_fmt_stream_map, and explode on comma */
+            $my_formats_array = explode(',',$url_encoded_fmt_stream_map);
+        } else {
+            echo '<p>No encoded format stream found.</p>';
+            echo '<p>Here is what we got from YouTube:</p>';
+            echo $my_video_info;
+        }
+        if (count($my_formats_array) == 0) {
+            echo '<p>No format stream map found - was the video id correct?</p>';
+            exit;
+        }
+
+        $avail_formats[] = '';
+        $i = 0;
+        $ipbits = $ip = $itag = $sig = $quality = '';
+        $expire = time();
+
+        foreach($my_formats_array as $format) {
+            parse_str($format);
+            $avail_formats[$i]['itag'] = $itag;
+            $avail_formats[$i]['quality'] = $quality;
+            $type = explode(';',$type);
+            $avail_formats[$i]['type'] = $type[0];
+            $avail_formats[$i]['url'] = urldecode($url) . '&signature=' . $sig;
+            parse_str(urldecode($url));
+            $avail_formats[$i]['expires'] = date("G:i:s T", $expire);
+            $avail_formats[$i]['ipbits'] = $ipbits;
+            $avail_formats[$i]['ip'] = $ip;
+            $i++;
+        }
+        /* now that we have the array, print the options */
+        for ($i = 0; $i < count($avail_formats); $i++) {
+            if($avail_formats[$i]['type'] == "video/mp4" && $avail_formats[$i]['itag'] == 18){
+                $token = base64_encode($avail_formats[$i]['url']);
+            }
+        }
+
+        $url  = base64_decode(filter_var($token));
+
+        //$url  = base64_decode(filter_var($_GET['token']));
+
+        // Fetch and serve
+        $user_id = auth()->user()->id;
+        $time = Carbon::now()->toDateTimeString();
+        $fileName = '/video/'.md5($user_id.$time).".".'mp4';
+        $path = $destDIR=public_path();
+
+        set_time_limit(0);
+
+        $file = fopen($path.$fileName, 'w+');
+
+        $curl = curl_init($url);
+
+        // Update as of PHP 5.4 array() can be written []
+        curl_setopt_array($curl, [
+            CURLOPT_URL            => $url,
+            CURLOPT_BINARYTRANSFER => 1,
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_FILE           => $file,
+            CURLOPT_TIMEOUT        => 50,
+            CURLOPT_USERAGENT      => 'Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)'
+        ]);
+
+        $response = curl_exec($curl);
+
+        if($response === false) {
+            // Update as of PHP 5.3 use of Namespaces Exception() becomes \Exception()
+            throw new \Exception('Curl error: ' . curl_error($curl));
+        }
+
+        $targetVideo = new Targets_video();
+        $targetVideo->targets_id = $input['targets_id'];
+        $targetVideo->video_path = $fileName;
+        $targetVideo->video_url = 'https://www.youtube.com/embed/'.$my_id;
+        $targetVideo->save();
+
+       return redirect()->back()->with('message', '已新增廣告影片!');
+    }
+
+    public function uploadTargetsVideo()
+    {
+        $input = Input::all();
+        $destDIR=public_path();
+        $time = Carbon::now()->toDateTimeString();
+        $extension = pathinfo($_FILES["video"]["name"], PATHINFO_EXTENSION);
+        $fileName = md5($input['created_id'].$time).".".$extension;
+
+        if (is_uploaded_file($_FILES['video']['tmp_name'])) {
+
+            if ($_FILES["video"]["error"] > 0) {
+                switch ($_FILES["video"]["error"]) {
+                    case 1 :
+                        die("檔案大小超出PHP限制");
+                    case 2 :
+                        die("檔案大小超出上傳限制");
+                    case 3 :
+                        die("檔案僅被部分上傳");
+                    case 4 :
+                        die("檔案未被上傳");
+                }
+            }
+
+            if (file_exists($destDIR . $_FILES["video"]["name"])) {
+                return "<p>檔案名字重複</p>";
+            } else {
+                $imageDIR = "/video/".$fileName;
+                if (move_uploaded_file($_FILES["video"]["tmp_name"], $destDIR . $imageDIR)) {
+                    $targetVideo = new Targets_video();
+                    $targetVideo->targets_id = $input['targets_id'];
+                    $targetVideo->video_path = $imageDIR;
+                    $targetVideo->save();
+
+                    return redirect()->back()->with('message', '已新增廣告影片!');
+
+                }
+            }
+        }
+    }
+
+    public function uploadTargetsImage()
+    {
+        $input = Input::all();
+        $destDIR=public_path();
+        $time = Carbon::now()->toDateTimeString();
+
+        $extension = pathinfo($_FILES["imageFile"]["name"], PATHINFO_EXTENSION);
+        $fileName = md5($input['created_id'].$time).".".$extension;
+
+        if (is_uploaded_file($_FILES['imageFile']['tmp_name'])) {
+
+            if ($_FILES["imageFile"]["error"] > 0) {
+                switch ($_FILES["imageFile"]["error"]) {
+                    case 1 :
+                        die("檔案大小超出PHP限制");
+                    case 2 :
+                        die("檔案大小超出上傳限制");
+                    case 3 :
+                        die("檔案僅被部分上傳");
+                    case 4 :
+                        die("檔案未被上傳");
+                }
+            }
+
+            if (file_exists($destDIR . $_FILES["imageFile"]["name"])) {
+                return "<p>檔案名字重複</p>";
+            } else {
+                $imageDIR = "/img/".$fileName;
+                if (move_uploaded_file($_FILES["imageFile"]["tmp_name"], $destDIR . $imageDIR)) {
+                    $targetImage = new Targets_image();
+                    $targetImage->targets_id = $input['targets_id'];
+                    $targetImage->image_path = $imageDIR;
+                    $targetImage->image_url = $input['url'];
+                    $targetImage->save();
+
+                    return redirect()->back()->with('message', '已新增廣告圖片!');
+
+                }
+            }
+        }
+    }
+
+    public function checkFileNameDuplicate()
+    {
+        $input = Input::all();
+        $name = $input['name'];
+
+        $target = target::where('name','=',$name);
+
+        if($target->count() > 0){
+            return "false";
+        }
+        return "true";
+    }
+
+    public function checkUserNameDuplicate()
+    {
+        $input = Input::all();
+        $name = $input['email'];
+        $user = User::where('email','=',$name);
+
+        if($user->count()>0){
+            return "false";
+        }
+        return "true";
+    }
+
+    public function checkModifyUserNameDuplicate()
+    {
+        $input = Input::all();
+        $email = $input['email'];
+        $id = $input['id'];
+        $users = User::where('email','=',$email)->get();
+        foreach($users as $user) {
+            if ($user->id != $id && $user->email == $email) {
+                return "false";
+            }
+        }
+        return "true";
+    }
+
+    public function validateYoutubeUrl()
+    {
+        $input = Input::all();
+        $youtubeUrl = $input['youtubeUrl'];
+
+        if( preg_match('/^https:\/\/w{3}?.youtube.com\//', $youtubeUrl) ){
+            $url   = parse_url($youtubeUrl);
+            $my_id = NULL;
+            if( is_array($url) && count($url)>0 && isset($url['query']) && !empty($url['query']) ){
+                $parts = explode('&',$url['query']);
+                if( is_array($parts) && count($parts) > 0 ){
+                    foreach( $parts as $p ){
+                        $pattern = '/^v\=/';
+                        if( preg_match($pattern, $p) ){
+                            return "true";
+                        }
+                    }
+                }
+            }
+        }
+        return "false";
+    }
+
+    public function uploadImage()
+    {
+        $destDIR=public_path();
+        $user_id = auth()->user()->id;
+        $time = Carbon::now()->toDateTimeString();
+
+        $extension = pathinfo($_FILES["file"]["name"], PATHINFO_EXTENSION);
+        $fileName = md5($user_id.$time).".".$extension;
+
+        if (is_uploaded_file($_FILES['file']['tmp_name'])) {
+
+            if ($_FILES["file"]["error"] > 0) {
+                switch ($_FILES["file"]["error"]) {
+                    case 1 :
+                        die("檔案大小超出PHP限制");
+                    case 2 :
+                        die("檔案大小超出上傳限制");
+                    case 3 :
+                        die("檔案僅被部分上傳");
+                    case 4 :
+                        die("檔案未被上傳");
+                }
+            }
+
+            if (file_exists($destDIR . $_FILES["file"]["name"])) {
+                return "<p>檔案名字重複</p>";
+            } else {
+                $imageDIR = "/img/".$fileName;
+                if (move_uploaded_file($_FILES["file"]["tmp_name"], $destDIR . $imageDIR)) {
+                    return $imageDIR;
+                }
+            }
+        }
+    }
+
+    function curlGet($URL) {
+        global $config; // get global $config to know if $config['multipleIPs'] is true
+        $ch = curl_init();
+        $timeout = 3;
+        if ($config['multipleIPs'] === true) {
+            // if $config['multipleIPs'] is true set outgoing ip to $outgoing_ip
+            global $outgoing_ip;
+            curl_setopt($ch, CURLOPT_INTERFACE, $outgoing_ip);
+        }
+        curl_setopt( $ch , CURLOPT_URL , $URL );
+        curl_setopt( $ch , CURLOPT_RETURNTRANSFER , 1 );
+        curl_setopt( $ch , CURLOPT_CONNECTTIMEOUT , $timeout );
+        /* if you want to force to ipv6, uncomment the following line */
+        //curl_setopt( $ch , CURLOPT_IPRESOLVE , 'CURLOPT_IPRESOLVE_V6');
+        $tmp = curl_exec( $ch );
+        curl_close( $ch );
+        return $tmp;
+    }
+
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="140022ec-244f-499e-9ee2-382dae2b940a" name="AWS" url="http://52.68.61.191">
+        <fileTransfer host="52.68.61.191" port="22" privateKey="C:\Users\Sam\Downloads\WebPlatform.pem" rootFolder="/var/www/html/platform/" accessType="SFTP" username="ubuntu" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
